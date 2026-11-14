@@ -1,0 +1,26 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.cache/
+
+# Compiled ML model binaries (regenerated locally on first run)
+models/*.joblib
+
+# Cached historical weather downloads
+data/*.csv
+
+# Local forecast logs & cron outputs
+outputs/*.csv
+outputs/*.log
+
+# OS & editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
