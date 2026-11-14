@@ -132,10 +132,10 @@ if os.path.exists(HISTORY_LOG_FILE):
     logs_df = pd.read_csv(HISTORY_LOG_FILE)
     
     # Normalize any legacy column names so older CSV rows never trigger a KeyError
-    logs_df.rename(columns={
+    logs_df = logs_df.rename(columns={
         "pred_temp": "predicted_temp",
         "rain_prob": "predicted_rain_prob"
-    }, inplace=True)
+    })
 
     # Verify required columns exist before running evaluation math
     required_cols = {"execution_time", "target_time", "location", "current_temp", "predicted_temp"}
@@ -153,7 +153,7 @@ if os.path.exists(HISTORY_LOG_FILE):
         actuals = loc_logs[["execution_time", "current_temp"]].drop_duplicates().copy()
         actuals["hour_bucket"] = actuals["execution_time"].dt.round("h")
         actuals = actuals.groupby("hour_bucket")["current_temp"].mean().reset_index()
-        actuals.rename(columns={"current_temp": "actual_temp"}, inplace=True)
+        actuals = actuals.rename(columns={"current_temp": "actual_temp"})
 
         loc_logs["target_bucket"] = loc_logs["target_time"].dt.round("h")
         eval_df = pd.merge(loc_logs, actuals, left_on="target_bucket", right_on="hour_bucket", how="inner")

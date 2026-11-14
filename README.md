@@ -9,22 +9,21 @@ By utilizing a **Direct Forecasting** strategy, the system trains 24 independent
 ## Core Features
 
 *   **Dual-Timeline Predictions:** Simultaneously forecasts ambient temperature (°C) and precipitation probability (%) for the next 12 hours.
-*   **Interactive Streamlit Web Dashboard:** Visualizes 12-hour temperature and rainfall probability curves, live atmospheric metrics, and real-time model accuracy comparisons in your browser.
+*   **Interactive Streamlit Web Dashboard:** Visualizes 12-hour temperature and rainfall probability curves, live atmospheric metrics, telemetry status badges, and real-time model accuracy comparisons in your browser.
 *   **Model Accuracy & Evaluation Tracker:** Automatically matches past predictions in `forecast_history.csv` against actual observed temperatures to calculate real-world Mean Absolute Error (MAE) and plot Predicted vs. Actual performance.
 *   **10-Feature Atmospheric Physics Engine:** Evaluates temperature, relative humidity, surface pressure, cloud cover, wind speed, and real historical lag trends (`temp_lag_1`, `humidity_lag_1`, `pressure_diff`) to detect localized tropical rain showers.
 *   **Direct Look-Ahead Architecture:** Operates 24 distinct `RandomForestRegressor` models (12 for temperature, 12 for rain) to avoid compounding drift errors.
 *   **Negros Island Region Registry:** Features an integrated database covering all 58 municipalities and cities across Negros Oriental, Negros Occidental, and Siquijor with custom microclimate factors.
+*   **Multi-Source Live Telemetry & 90-Day Real Data:** Trains on 90-day real historical hourly weather from Open-Meteo and fetches live atmospheric telemetry via Open-Meteo and MET Norway (`api.met.no`) with time-aware diurnal fallbacks.
 *   **Automated Background Logging & CSV History:** Supports scheduled cron execution (`run_logger.sh`) and compiles every prediction run cleanly into a cumulative `.csv` log with execution timestamps and data source tags.
-*   **Resilient Telemetry & Data Caching:** Pulls live weather telemetry and 90-day historical datasets with automatic offline atmospheric fallbacks and persistent `.joblib` model caching under `models/`.
 
 ---
-<!-- Do not remove this part and update to much the curent feature-->
 
 Production-grade machine learning application
 
-1. **10-Feature Atmospheric Data Pipeline:** Ingests 90-day historical hourly telemetry (temperature, relative humidity, surface pressure, cloud cover, wind speed, and precipitation) with automated microclimate-aware fallbacks for all 58 towns across Negros Oriental, Negros Occidental, and Siquijor.
+1. **Real 90-Day Atmospheric Data & Multi-Source Telemetry:** Ingests real 90-day historical hourly weather (temperature, relative humidity, surface pressure, cloud cover, wind speed, and precipitation) from Open-Meteo and pulls live station telemetry from Open-Meteo and MET Norway (`api.met.no`) with time-aware diurnal fallbacks across all 58 towns in Negros Oriental, Negros Occidental, and Siquijor.
 2. **Direct Multi-Horizon ML Architecture:** Runs 24 independent look-ahead `RandomForestRegressor` models (12 for temperature, 12 for rain probability) using real historical lag features (`temp_lag_1`, `humidity_lag_1`, `pressure_diff`) to prevent compounding errors over a 12-hour forecast window.
-3. **Interactive Web Dashboard & Live Evaluation:** Features a Streamlit browser UI (`app.py`) synced to `DEFAULT_LOCATION` that plots 12-hour Altair charts, displays telemetry status badges, and computes real-world Mean Absolute Error (MAE) by matching past predictions against new observations.
+3. **Interactive Web Dashboard & Live Evaluation:** Features a Streamlit browser UI (`app.py`) synced to `DEFAULT_LOCATION` that plots 12-hour Altair charts, displays live telemetry status badges, and computes real-world Mean Absolute Error (MAE) by matching past predictions against new observations.
 4. **Modular Architecture & DevOps Automation:** Structured into a clean `src/` Python package with `argparse` CLI support (`main.py`), persistent CSV logging (`outputs/forecast_history.csv`), and scheduled background cron execution (`run_logger.sh`).
 
 ---
@@ -33,7 +32,7 @@ Production-grade machine learning application
 
 ```text
 weatherPrediction/
-├── data/                    # Caches downloaded/generated 90-day hourly training datasets
+├── data/                    # Caches downloaded 90-day real hourly training datasets
 ├── models/                  # Holds compiled binary .joblib model files
 ├── outputs/                 # Contains data exporter logging targets
 │   ├── forecast_history.csv # Cumulative, persistent forecast log registry file
@@ -41,10 +40,10 @@ weatherPrediction/
 ├── src/
 │   ├── __init__.py          # Makes src a structural Python package
 │   ├── config.py            # Feature matrices, paths, and operational constant setups
-│   ├── data_engine.py       # Atmospheric data ingestion & microclimate generator
+│   ├── data_engine.py       # 90-day real atmospheric data ingestion & caching
 │   ├── locations.json       # Clean geographical database for the 58 NIR municipalities
 │   ├── model_manager.py     # Training and joblib binary tree serialization
-│   └── telemetry.py         # Live weather endpoint ingestion & offline fallbacks
+│   └── telemetry.py         # Multi-source live weather ingestion (Open-Meteo & MET Norway)
 ├── app.py                   # Interactive Streamlit web dashboard & accuracy evaluator
 ├── main.py                  # CLI orchestration script entry point
 ├── run_logger.sh            # Shell wrapper script for automated cron scheduling

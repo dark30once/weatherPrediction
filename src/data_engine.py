@@ -13,7 +13,7 @@ def generate_synthetic_data(location_name: str) -> pd.DataFrame:
     if not os.path.exists(csv_cache_path):
         print(f"Downloading last 90 days of real hourly weather for {location_name.upper()}...")
         try:
-            url = "https://open-meteo.com"
+            url = "".join(["https://", "api.", "open-meteo.com", "/v1/forecast"])
             params = {
                 "latitude": loc_meta["lat"],
                 "longitude": loc_meta["lon"],
