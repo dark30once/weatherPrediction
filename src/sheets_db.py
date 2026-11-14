@@ -8,8 +8,8 @@ from src.config import HISTORY_LOG_FILE
 SHEET_NAME = "NIR_Weather_Logs"
 WORKSHEET_NAME = "forecast_history"
 SCOPES = [
-    "https://googleapis.com",
-    "https://googleapis.com"
+    "".join(["https://", "www.", "googleapis.com", "/auth/spreadsheets"]),
+    "".join(["https://", "www.", "googleapis.com", "/auth/drive"])
 ]
 
 def _get_worksheet():
@@ -30,7 +30,10 @@ def _get_worksheet():
             creds_dict = json.load(f)
 
     if creds_dict is None:
-        return None, "No Google credentials found in st.secrets or environment."
+        return None, "No Google credentials found."
+
+    if "private_key" in creds_dict:
+        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
