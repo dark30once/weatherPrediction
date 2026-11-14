@@ -1,15 +1,14 @@
 import argparse
 import datetime
-import os
 import numpy as np
 import pandas as pd
-from src.config import LOCATION_REGISTRY, DEFAULT_LOCATION, FORECAST_HORIZON, FEATURES, HISTORY_LOG_FILE
+from src.config import LOCATION_REGISTRY, DEFAULT_LOCATION, FORECAST_HORIZON, FEATURES
 from src.data_engine import generate_synthetic_data
 from src.model_manager import manage_models
 from src.telemetry import fetch_live_telemetry
+from src.sheets_db import append_forecast_records
 
 def generate_forecast(temp_models, rain_models, live_data: dict, max_hours: int, location: str):
-    # Map all 10 atmospheric features cleanly in exact order
     live_features_row = pd.DataFrame([{
         "temp": live_data["temp"],
         "humidity": live_data["humidity"],
@@ -57,10 +56,8 @@ def generate_forecast(temp_models, rain_models, live_data: dict, max_hours: int,
         })
 
     print("-------------------------------------------------------")
-    forecast_df = pd.DataFrame(export_records)
-    file_exists = os.path.exists(HISTORY_LOG_FILE)
-    forecast_df.to_csv(HISTORY_LOG_FILE, mode='a', header=not file_exists, index=False)
-    print(f"Logged {max_hours}-hour predictions into: {HISTORY_LOG_FILE}")
+    # Saves to Google Sheets AND local CSV backup automatically
+    append_forecast_records(export_records)
     print("=======================================================")
 
 if __name__ == "__main__":

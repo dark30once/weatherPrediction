@@ -1,13 +1,13 @@
 import datetime
-import os
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
-from src.config import LOCATION_REGISTRY, DEFAULT_LOCATION, FORECAST_HORIZON, HISTORY_LOG_FILE, FEATURES
+from src.config import LOCATION_REGISTRY, DEFAULT_LOCATION, FORECAST_HORIZON, FEATURES
 from src.data_engine import generate_synthetic_data
 from src.model_manager import manage_models
 from src.telemetry import fetch_live_telemetry
+from src.sheets_db import append_forecast_records, load_forecast_history
 
 # --- Page Configurations ---
 st.set_page_config(page_title="NIR Weather Forecast Engine", page_icon="🌦️", layout="wide")
@@ -28,7 +28,6 @@ selected_location_title = st.sidebar.selectbox(
     index=default_index
 )
 target_location = selected_location_title.lower().replace(" ", "_")
-
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Provincial Coordinates:**")
@@ -98,8 +97,8 @@ for h in range(1, FORECAST_HORIZON + 1):
         "predicted_rain_prob": round(pred_rain, 1)
     })
 
-history_df = pd.DataFrame(export_history)
-history_df.to_csv(HISTORY_LOG_FILE, mode='a', header=not os.path.exists(HISTORY_LOG_FILE), index=False)
+# Sync predictions to Google Sheets (and local CSV backup)
+append_forecast_records(export_history)
 timeline_df = pd.DataFrame(forecast_records)
 
 # --- Data Visualizations ---
@@ -127,27 +126,23 @@ with tab3:
 
 # --- Model Accuracy & Evaluation Section ---
 st.subheader("🎯 Model Accuracy & Evaluation (Predicted vs. Actual)")
+logs_df = load_forecast_history()
 
-if os.path.exists(HISTORY_LOG_FILE):
-    logs_df = pd.read_csv(HISTORY_LOG_FILE)
-    
-    # Normalize any legacy column names so older CSV rows never trigger a KeyError
+if not logs_df.empty:
     logs_df = logs_df.rename(columns={
         "pred_temp": "predicted_temp",
         "rain_prob": "predicted_rain_prob"
     })
 
-    # Verify required columns exist before running evaluation math
     required_cols = {"execution_time", "target_time", "location", "current_temp", "predicted_temp"}
     if not required_cols.issubset(logs_df.columns):
-        st.error(f"CSV schema mismatch. Found columns: {list(logs_df.columns)}")
+        st.error(f"Sheet/CSV schema mismatch. Found columns: {list(logs_df.columns)}")
         st.stop()
 
     logs_df["execution_time"] = pd.to_datetime(logs_df["execution_time"])
     logs_df["target_time"] = pd.to_datetime(logs_df["target_time"])
 
-    # Filter logs for the currently selected municipality
-    loc_logs = logs_df[logs_df["location"].str.upper() == target_location.upper()].copy()
+    loc_logs = logs_df[logs_df["location"].astype(str).str.upper() == target_location.upper()].copy()
 
     if not loc_logs.empty:
         actuals = loc_logs[["execution_time", "current_temp"]].drop_duplicates().copy()
@@ -182,11 +177,11 @@ if os.path.exists(HISTORY_LOG_FILE):
             ).properties(height=320).interactive()
             st.altair_chart(eval_chart, width="stretch")
         else:
-            st.info("⏳ Waiting for target hours to pass so past predictions can be matched against new actual observations. Keep the cron job running for a few hours!")
+            st.info("⏳ Waiting for target hours to pass so past predictions can be matched against new actual observations. Keep the scheduled logger running for a few hours!")
     else:
         st.info(f"No logged runs found yet for {selected_location_title}.")
 
-    with st.expander("💾 View Raw Forecast History Log"):
+    with st.expander("💾 View Persistent Forecast History Log (Google Sheets)"):
         st.dataframe(logs_df.tail(60), width="stretch")
 else:
-    st.info("No query logs saved on disk yet.")
+    st.info("No query logs saved yet. Run a prediction or wait for the scheduled workflow to populate Google Sheets.")

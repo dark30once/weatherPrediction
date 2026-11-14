@@ -24,3 +24,5 @@ outputs/*.log
 Thumbs.db
 .vscode/
 .idea/
+
+service_account.json
