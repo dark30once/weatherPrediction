@@ -99,7 +99,6 @@ for h in range(1, FORECAST_HORIZON + 1):
 
 # Sync predictions to Google Sheets (and local CSV backup)
 # append_forecast_records(export_history)
-# timeline_df = pd.DataFrame(forecast_records)
 
 sync_status = append_forecast_records(export_history)
 if "Synced" in sync_status:
@@ -107,6 +106,7 @@ if "Synced" in sync_status:
 else:
     st.sidebar.error(f"☁️ {sync_status}")
 
+timeline_df = pd.DataFrame(forecast_records)
 
 # --- Data Visualizations ---
 st.subheader("📈 12-Hour Machine Learning Predictive Timeline Trends")
