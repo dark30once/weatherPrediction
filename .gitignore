@@ -26,3 +26,4 @@ Thumbs.db
 .idea/
 
 service_account.json
+run_logger.sh
