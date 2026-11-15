@@ -11,6 +11,7 @@ with open(JSON_PATH, "r") as f:
 
 DEFAULT_LOCATION = "sibulan"
 FORECAST_HORIZON = 12
+MODEL_VERSION = "v1_clf"
 
 FEATURES = [
     "temp", "humidity", "pressure", "cloud_cover", "wind",
@@ -21,6 +22,7 @@ FEATURES = [
 HISTORY_LOG_FILE = os.path.join("outputs", "forecast_history.csv")
 
 def get_model_prefixes(location: str):
-    prefix_temp = os.path.join("models", f"model_temp_{location.lower()}")
-    prefix_rain = os.path.join("models", f"model_rain_{location.lower()}")
+    clean_loc = location.lower().replace(" ", "_")
+    prefix_temp = os.path.join("models", f"model_temp_{clean_loc}_{MODEL_VERSION}")
+    prefix_rain = os.path.join("models", f"model_rain_{clean_loc}_{MODEL_VERSION}")
     return prefix_temp, prefix_rain
