@@ -36,9 +36,9 @@ def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
         else:
             model_r = RandomForestClassifier(
                 random_state=0,
-                n_estimators=100,
-                max_depth=10,
-                min_samples_split=8,
+                n_estimators=120,
+                max_depth=8,
+                min_samples_leaf=15,
                 class_weight="balanced"
             )
             model_r.fit(split_df[FEATURES], split_df[f"target_rain_h{horizon}"])
