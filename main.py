@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from src.config import LOCATION_REGISTRY, DEFAULT_LOCATION, FORECAST_HORIZON, FEATURES
 from src.data_engine import generate_synthetic_data
-from src.model_manager import manage_models
+from src.model_manager import manage_models, predict_rain_probability
 from src.telemetry import fetch_live_telemetry
 from src.sheets_db import append_forecast_records
 
@@ -46,7 +46,7 @@ def run_for_location(location: str, quiet: bool = False) -> str:
     for h in range(1, FORECAST_HORIZON + 1):
         future_dt = live_data["time"] + datetime.timedelta(hours=h)
         pred_temp = temp_models[h].predict(live_features_row).item()
-        pred_rain = float(np.clip(rain_models[h].predict(live_features_row).item(), 0, 100))
+        pred_rain = predict_rain_probability(rain_models[h], live_features_row)
 
 
         if not quiet:
