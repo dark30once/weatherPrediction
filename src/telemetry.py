@@ -1,13 +1,14 @@
 import datetime
+from zoneinfo import ZoneInfo
 import numpy as np
 import requests
 from src.config import LOCATION_REGISTRY
 
 def fetch_live_telemetry(target_loc: str) -> dict:
     loc_data = LOCATION_REGISTRY.get(target_loc.lower(), {"lat": 9.3584, "lon": 123.2850, "base_temp": 28.0, "rain_factor": 1.0})
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(ZoneInfo("Asia/Manila")).replace(tzinfo=None)
     errors = []
-
+    
     # --- ATTEMPT 1: Open-Meteo (Constructed safely so paths never get stripped) ---
     try:
         om_url = "".join(["https://", "api.", "open-meteo.com", "/v1/forecast"])

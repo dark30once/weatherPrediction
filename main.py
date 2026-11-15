@@ -2,6 +2,7 @@ import argparse
 import datetime
 import numpy as np
 import pandas as pd
+from zoneinfo import ZoneInfo
 from src.config import LOCATION_REGISTRY, DEFAULT_LOCATION, FORECAST_HORIZON, FEATURES
 from src.data_engine import generate_synthetic_data
 from src.model_manager import manage_models
@@ -34,7 +35,8 @@ def generate_forecast(temp_models, rain_models, live_data: dict, max_hours: int,
     print("-------------------------------------------------------")
 
     export_records = []
-    execution_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # execution_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    execution_timestamp = datetime.datetime.now(ZoneInfo("Asia/Manila")).strftime("%Y-%m-%d %H:%M:%S")
 
     for h in range(1, max_hours + 1):
         future_dt = live_data["time"] + datetime.timedelta(hours=h)
