@@ -15,9 +15,7 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run weather logger
+      - name: Run weather logger for all 58 NIR municipalities
         env:
           GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
-        run: |
-          python3 main.py --location Sibulan
-          python3 main.py --location Dauin
+        run: python3 main.py --all
