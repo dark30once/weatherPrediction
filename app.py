@@ -102,7 +102,7 @@ for h in range(1, FORECAST_HORIZON + 1):
 # Sync predictions to Google Sheets (and local CSV backup)
 # append_forecast_records(export_history)
 
-sync_status = append_forecast_records(export_history) or "Local CSV only"
+sync_status = append_forecast_records(export_history, target_location) or "Local CSV only"
 if "Synced" in sync_status:
     st.sidebar.success(f"☁️ {sync_status}")
 else:
@@ -135,7 +135,7 @@ with tab3:
 
 # --- Model Accuracy & Evaluation Section ---
 st.subheader("🎯 Model Accuracy & Evaluation (Predicted vs. Actual)")
-logs_df = load_forecast_history()
+logs_df = load_forecast_history(target_location)
 
 if not logs_df.empty:
     logs_df = logs_df.rename(columns={
