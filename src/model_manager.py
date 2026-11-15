@@ -5,6 +5,12 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from src.config import FEATURES, get_model_prefixes
 
+def _atomic_dump(model, filepath: str):
+    """Writes joblib binary to a temp file first, then atomically renames it."""
+    tmp_path = f"{filepath}.{os.getpid()}.tmp"
+    joblib.dump(model, tmp_path)
+    os.replace(tmp_path, filepath)
+
 def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
     temp_registry = {}
     rain_registry = {}
@@ -23,17 +29,29 @@ def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
         split_idx = int(len(clean_df) * 0.85)
         split_df = clean_df.iloc[:split_idx]
         
+        # --- Temperature Regressor (with corrupt-file auto-recovery) ---
+        model_t = None
         if os.path.exists(file_temp):
-            model_t = joblib.load(file_temp)
-        else:
+            try:
+                model_t = joblib.load(file_temp)
+            except Exception:
+                os.remove(file_temp)
+
+        if model_t is None:
             model_t = RandomForestRegressor(random_state=0, n_estimators=80, max_depth=10, min_samples_split=8)
             model_t.fit(split_df[FEATURES], split_df[f"target_temp_h{horizon}"])
-            joblib.dump(model_t, file_temp)
+            _atomic_dump(model_t, file_temp)
         temp_registry[horizon] = model_t
 
+        # --- Rain Classifier (with corrupt-file auto-recovery) ---
+        model_r = None
         if os.path.exists(file_rain):
-            model_r = joblib.load(file_rain)
-        else:
+            try:
+                model_r = joblib.load(file_rain)
+            except Exception:
+                os.remove(file_rain)
+
+        if model_r is None:
             model_r = RandomForestClassifier(
                 random_state=0,
                 n_estimators=120,
@@ -42,7 +60,7 @@ def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
                 class_weight="balanced"
             )
             model_r.fit(split_df[FEATURES], split_df[f"target_rain_h{horizon}"])
-            joblib.dump(model_r, file_rain)
+            _atomic_dump(model_r, file_rain)
         rain_registry[horizon] = model_r
 
     print(f"Direct look-ahead prediction matrices compiled successfully for {location.upper()}.")
