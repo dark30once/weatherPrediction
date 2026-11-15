@@ -154,15 +154,29 @@ if not logs_df.empty:
     loc_logs = logs_df[logs_df["location"].astype(str).str.upper() == target_location.upper()].copy()
 
     if not loc_logs.empty:
-        actuals = loc_logs[["execution_time", "current_temp"]].drop_duplicates().copy()
-        actuals["hour_bucket"] = actuals["execution_time"].dt.round("h")
-        actuals = actuals.groupby("hour_bucket")["current_temp"].mean().reset_index()
-        actuals = actuals.rename(columns={"current_temp": "actual_temp"})
+        # Prepare sorted actual observations
+        actuals = (
+            loc_logs[["execution_time", "current_temp"]]
+            .drop_duplicates()
+            .rename(columns={"execution_time": "obs_time", "current_temp": "actual_temp"})
+            .sort_values("obs_time")
+        )
 
-        loc_logs["target_bucket"] = loc_logs["target_time"].dt.round("h")
-        eval_df = pd.merge(loc_logs, actuals, left_on="target_bucket", right_on="hour_bucket", how="inner")
+        # Prepare sorted predictions
+        preds = loc_logs.sort_values("target_time").copy()
 
-        eval_df = eval_df[(eval_df["target_time"] - eval_df["execution_time"]).dt.total_seconds() >= 1800]
+        # Match each prediction to the nearest actual observation within ±45 minutes
+        eval_df = pd.merge_asof(
+            preds,
+            actuals,
+            left_on="target_time",
+            right_on="obs_time",
+            tolerance=pd.Timedelta("45min"),
+            direction="nearest"
+        ).dropna(subset=["actual_temp"])
+
+        # Keep only predictions made at least 30 minutes before the actual observation occurred
+        eval_df = eval_df[(eval_df["obs_time"] - eval_df["execution_time"]).dt.total_seconds() >= 1800]
 
         if not eval_df.empty:
             eval_df["abs_error"] = (eval_df["predicted_temp"] - eval_df["actual_temp"]).abs()
