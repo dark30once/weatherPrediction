@@ -45,8 +45,9 @@ def run_for_location(location: str, quiet: bool = False) -> str:
     export_records = []
     for h in range(1, FORECAST_HORIZON + 1):
         future_dt = live_data["time"] + datetime.timedelta(hours=h)
-        pred_temp = float(temp_models[h].predict(live_features_row)[0])
-        pred_rain = float(np.clip(rain_models[h].predict(live_features_row)[0], 0, 100))
+        pred_temp = temp_models[h].predict(live_features_row).item()
+        pred_rain = float(np.clip(rain_models[h].predict(live_features_row).item(), 0, 100))
+
 
         if not quiet:
             future_time_str = future_dt.strftime("%I:%M %p")
