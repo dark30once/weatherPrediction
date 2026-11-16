@@ -2,12 +2,17 @@ name: Automated Weather Forecast Logger
 
 on:
   schedule:
-    - cron: "0 */3 * * *"  # Runs every 3 hours
-  workflow_dispatch:       # Allows manual test runs from the Actions tab
+    - cron: "17 */3 * * *"  # Offset to :17 past every 3rd UTC hour to avoid :00 queue drops
+  workflow_dispatch:       # Allows manual & API-triggered runs
+
+concurrency:
+  group: weather-cron-logger
+  cancel-in-progress: false
 
 jobs:
   log-weather:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
