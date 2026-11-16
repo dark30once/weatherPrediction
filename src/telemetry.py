@@ -3,18 +3,35 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import requests
 from src.config import LOCATION_REGISTRY
+from src.pagasa_aws import get_pagasa_ground_boost
+
+def _attach_pagasa_sensor(telemetry: dict, lat: float, lon: float) -> dict:
+    """Enriches live telemetry with nearest active PAGASA AWS ground-truth rainfall."""
+    aws = get_pagasa_ground_boost(lat, lon)
+    telemetry["pagasa_aws"] = aws
+
+    if aws is not None:
+        # If PAGASA station is right next door (<35 km) and reports higher ground humidity, blend it in
+        if aws["distance_km"] <= 35.0 and aws["humidity"] is not None:
+            telemetry["humidity"] = max(telemetry["humidity"], float(aws["humidity"]))
+
+        precip_note = f" | PAGASA AWS ({aws['station']}): {aws['precip_mm']} mm/hr"
+        telemetry["source"] = telemetry["source"] + precip_note
+
+    return telemetry
 
 def fetch_live_telemetry(target_loc: str) -> dict:
     loc_data = LOCATION_REGISTRY.get(target_loc.lower(), {"lat": 9.3584, "lon": 123.2850, "base_temp": 28.0, "rain_factor": 1.0})
+    lat, lon = float(loc_data["lat"]), float(loc_data["lon"])
     now = datetime.datetime.now(ZoneInfo("Asia/Manila")).replace(tzinfo=None)
     errors = []
-    
-    # --- ATTEMPT 1: Open-Meteo (Constructed safely so paths never get stripped) ---
+
+    # --- ATTEMPT 1: Open-Meteo ---
     try:
         om_url = "".join(["https://", "api.", "open-meteo.com", "/v1/forecast"])
         params = {
-            "latitude": loc_data["lat"],
-            "longitude": loc_data["lon"],
+            "latitude": lat,
+            "longitude": lon,
             "hourly": "temperature_2m,relative_humidity_2m,surface_pressure,cloud_cover,wind_speed_10m",
             "past_hours": 3,
             "forecast_hours": 1,
@@ -24,7 +41,7 @@ def fetch_live_telemetry(target_loc: str) -> dict:
         response.raise_for_status()
         hourly = response.json()["hourly"]
 
-        return {
+        result = {
             "temp": float(hourly["temperature_2m"][-2]),
             "humidity": float(hourly["relative_humidity_2m"][-2]),
             "pressure": float(hourly["surface_pressure"][-2]),
@@ -36,16 +53,14 @@ def fetch_live_telemetry(target_loc: str) -> dict:
             "time": now,
             "source": "Live Open-Meteo Telemetry"
         }
+        return _attach_pagasa_sensor(result, lat, lon)
     except Exception as e:
         errors.append(f"Open-Meteo: {type(e).__name__}")
 
-    # --- ATTEMPT 2: MET Norway (Constructed safely so paths never get stripped) ---
+    # --- ATTEMPT 2: MET Norway (api.met.no) ---
     try:
         met_url = "".join(["https://", "api.", "met.no", "/weatherapi/locationforecast/2.0/compact"])
-        met_params = {
-            "lat": round(float(loc_data["lat"]), 4),
-            "lon": round(float(loc_data["lon"]), 4)
-        }
+        met_params = {"lat": round(lat, 4), "lon": round(lon, 4)}
         headers = {"User-Agent": "NIRWeatherPredictionApp/1.0 ://github.com"}
         met_resp = requests.get(met_url, params=met_params, headers=headers, timeout=10)
         met_resp.raise_for_status()
@@ -61,7 +76,7 @@ def fetch_live_telemetry(target_loc: str) -> dict:
         cloud_cover = float(curr["cloud_area_fraction"])
         wind = round(float(curr["wind_speed"]) * 3.6, 1)
 
-        return {
+        result = {
             "temp": temp,
             "humidity": humidity,
             "pressure": pressure,
@@ -73,8 +88,9 @@ def fetch_live_telemetry(target_loc: str) -> dict:
             "time": now,
             "source": "Live MET Norway Station"
         }
+        return _attach_pagasa_sensor(result, lat, lon)
     except Exception as e:
-        errors.append(f"MET.no: {type(e).__name__} ({e})")
+        errors.append(f"MET.no: {type(e).__name__}")
 
     # --- ATTEMPT 3: Time-Aware Diurnal Atmospheric Fallback ---
     base_t = loc_data.get("base_temp", 28.0)
@@ -87,7 +103,7 @@ def fetch_live_telemetry(target_loc: str) -> dict:
     est_humidity = round(np.clip(80 + 10 * np.cos(2 * np.pi * (now.hour - 4) / 24), 60, 98), 1)
     est_clouds = round(np.clip(45 * rain_f, 15, 95), 0)
 
-    return {
+    result = {
         "temp": est_temp,
         "humidity": est_humidity,
         "pressure": 1010.0,
@@ -99,3 +115,4 @@ def fetch_live_telemetry(target_loc: str) -> dict:
         "time": now,
         "source": f"Diurnal Fallback [{' | '.join(errors)}]"
     }
+    return _attach_pagasa_sensor(result, lat, lon)

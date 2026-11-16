@@ -7,9 +7,13 @@ from src.config import FEATURES, get_model_prefixes
 
 def _atomic_dump(model, filepath: str):
     """Writes joblib binary to a temp file first, then atomically renames it."""
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     tmp_path = f"{filepath}.{os.getpid()}.tmp"
-    joblib.dump(model, tmp_path)
-    os.replace(tmp_path, filepath)
+    try:
+        joblib.dump(model, tmp_path)
+        os.replace(tmp_path, filepath)
+    except FileNotFoundError:
+        joblib.dump(model, filepath)
 
 def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
     temp_registry = {}
@@ -66,8 +70,8 @@ def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
     print(f"Direct look-ahead prediction matrices compiled successfully for {location.upper()}.")
     return temp_registry, rain_registry
 
-def predict_rain_probability(model, features_row: pd.DataFrame) -> float:
-    """Safely extracts a 0-100% rain probability from a RandomForestClassifier."""
+def predict_rain_probability(model, features_row: pd.DataFrame, horizon: int = 1, pagasa_aws: dict | None = None) -> float:
+    """Extracts 0-100% rain probability and applies PAGASA AWS ground-truth boost if active rain is detected."""
     if hasattr(model, "predict_proba"):
         probs = next(iter(model.predict_proba(features_row)))
         if len(probs) > 1:
@@ -77,5 +81,14 @@ def predict_rain_probability(model, features_row: pd.DataFrame) -> float:
             raw_prob = 100.0 if only_class == 1 else 0.0
     else:
         raw_prob = float(model.predict(features_row).item())
+
+    # Apply decaying ground-truth rain boost for hours +1 to +3 when PAGASA AWS measures active rainfall
+    if pagasa_aws and pagasa_aws.get("precip_mm", 0.0) > 0.0 and horizon <= 3:
+        precip = float(pagasa_aws["precip_mm"])
+        dist_factor = max(0.5, 1.0 - (pagasa_aws.get("distance_km", 0.0) / 150.0))
+        decay = {1: 1.0, 2: 0.7, 3: 0.4}.get(horizon, 0.0)
+        # Floor starts at 75% for light rain (0.1+ mm/hr) and scales up to 95% for heavy rain
+        ground_floor = min(95.0, (72.0 + precip * 8.0) * dist_factor * decay)
+        raw_prob = max(raw_prob, ground_floor)
 
     return float(np.clip(raw_prob, 0, 100))

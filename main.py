@@ -46,7 +46,8 @@ def run_for_location(location: str, quiet: bool = False) -> str:
     for h in range(1, FORECAST_HORIZON + 1):
         future_dt = live_data["time"] + datetime.timedelta(hours=h)
         pred_temp = temp_models[h].predict(live_features_row).item()
-        pred_rain = predict_rain_probability(rain_models[h], live_features_row)
+        pred_rain = predict_rain_probability(rain_models[h], live_features_row, horizon=h, pagasa_aws=live_data.get("pagasa_aws"))
+
 
 
         if not quiet:
@@ -81,7 +82,7 @@ if __name__ == "__main__":
         for idx, loc in enumerate(all_locations, start=1):
             status = run_for_location(loc, quiet=True)
             print(f"[{idx}/{len(all_locations)}] {loc.upper()} -> {status}")
-            time.sleep(1.1)  # Keeps writes safely under Google Sheets' 60 requests/min quota
+            time.sleep(2.2)  # Keeps writes safely under Google Sheets' 60 requests/min quota
 
         print("Batch complete for all 58 NIR municipalities!")
     else:

@@ -80,7 +80,7 @@ for h in range(1, FORECAST_HORIZON + 1):
     future_dt = live_data["time"] + datetime.timedelta(hours=h)
     
     pred_temp = float(temp_models[h].predict(live_features_row)[0])
-    pred_rain = predict_rain_probability(rain_models[h], live_features_row)
+    pred_rain = predict_rain_probability(rain_models[h], live_features_row, horizon=h, pagasa_aws=live_data.get("pagasa_aws"))
     
     forecast_records.append({
         "Hour Added": f"+{h}h",
