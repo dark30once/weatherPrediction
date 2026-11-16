@@ -2,29 +2,30 @@
 
 A modular, multi-target machine learning pipeline built to provide high-resolution, short-term **Temperature** and **Chance of Rain** forecasts for tropical microclimates across the Negros Island Region (NIR).
 
-By utilizing a **Direct Forecasting** strategy, the system trains 24 independent Random Forest models per municipality to look ahead hour-by-hour up to 12 hours out, drastically cutting down compounded errors and syncing predictions directly to dedicated Google Sheets tabs for continuous real-world accuracy evaluation.
+By utilizing a **Direct Forecasting** strategy, the system trains 24 independent Random Forest models per municipality (`12` temperature regressors and `12` calibrated rain probability classifiers) to look ahead hour-by-hour up to 12 hours out, blending multi-source live telemetry with PAGASA Automated Weather Station (AWS) ground-truth sensors and syncing predictions to Google Sheets for continuous real-world accuracy evaluation.
 
 ---
 
 ## Core Features
 
-*   **Dual-Timeline Predictions:** Simultaneously forecasts ambient temperature (°C) and precipitation probability (%) for the next 12 hours.
-*   **Interactive Streamlit Web Dashboard:** Visualizes 12-hour temperature and rainfall probability curves, live atmospheric metrics, telemetry status badges, cloud sync status, and real-time model accuracy comparisons in your browser.
-*   **Per-Municipality Google Sheets & CSV Storage:** Automatically creates and updates dedicated worksheet tabs (`SIBULAN`, `DAUIN`, `SAN_JUAN`, etc.) inside `NIR_Weather_Logs` via `gspread` alongside per-town local CSV logs (`outputs/history_<town>.csv`).
+*   **Dual-Timeline Predictions:** Simultaneously forecasts ambient temperature (°C) and calibrated precipitation probability (%) for the next 12 hours.
+*   **Interactive Streamlit Web Dashboard:** Visualizes 12-hour temperature and rainfall probability curves, live atmospheric metrics, telemetry & PAGASA AWS status badges, cloud sync status, and real-time model accuracy comparisons in your browser.
+*   **PAGASA AWS Ground-Truth Sensor Boost (`src/pagasa_aws.py`):** Scrapes live observations from PAGASA Automated Weather Stations across Negros and Central Visayas using Python's built-in `html.parser`, blending near-station humidity (`≤ 35 km`) and applying a decaying near-term rain boost (`+1h` to `+3h`) whenever active ground rainfall (`mm/hr > 0`) is detected.
+*   **Calibrated Rain Classifier & Physical Sanity Checks (`v1_real`):** Uses balanced `RandomForestClassifier` models (`min_samples_leaf=15`, `.predict_proba()`) paired with clear-sky physical caps (`cloud_cover < 20%` and `0.0 mm/hr` PAGASA rainfall) and atomic `.joblib` file recovery.
+*   **Per-Municipality Google Sheets & CSV Storage (`src/sheets_db.py`):** Automatically creates and updates dedicated worksheet tabs (`SIBULAN`, `DAUIN`, `SAN_JUAN`, etc.) inside `NIR_Weather_Logs` via `gspread` alongside per-town local CSV logs (`outputs/history_<town>.csv`).
 *   **Nearest-Time Model Accuracy & Evaluation Tracker:** Matches past predictions against actual observed temperatures within a ±45-minute window (`merge_asof`) to calculate real-world Mean Absolute Error (MAE) and plot Predicted vs. Actual performance.
 *   **10-Feature Atmospheric Physics Engine:** Evaluates temperature, relative humidity, surface pressure, cloud cover, wind speed, and real historical lag trends (`temp_lag_1`, `humidity_lag_1`, `pressure_diff`) to detect localized tropical rain showers.
-*   **Direct Look-Ahead Architecture:** Operates 24 distinct `RandomForestRegressor` models (12 for temperature, 12 for rain) to avoid compounding drift errors.
-*   **Negros Island Region Registry & Batch Mode:** Covers all 58 municipalities and cities across Negros Oriental, Negros Occidental, and Siquijor with custom microclimate factors and full-region `--all` CLI batch support.
-*   **Multi-Source Live Telemetry & Philippine Standard Time:** Trains on 90-day real historical hourly weather from Open-Meteo and fetches live station telemetry via Open-Meteo and MET Norway (`api.met.no`) locked to `Asia/Manila` time (`UTC+8`).
+*   **Negros Island Region Registry & Full-Region Batch Mode:** Covers all 58 municipalities and cities across Negros Oriental, Negros Occidental, and Siquijor with custom microclimate factors and `--all` CLI batch support.
+*   **Multi-Source Live Telemetry & Philippine Standard Time:** Trains on 90-day real historical hourly weather from Open-Meteo and fetches live telemetry via Open-Meteo and MET Norway (`api.met.no`) locked to `Asia/Manila` time (`UTC+8`).
 *   **Automated Cloud Cron Pipeline:** Uses GitHub Actions (`.github/workflows/cron_logger.yml`) to execute `python3 main.py --all` every 3 hours across all 58 NIR municipalities in the cloud.
 
 ---
 
 Production-grade machine learning application
 
-1. **Real 90-Day Atmospheric Data & Multi-Source Telemetry:** Ingests real 90-day historical hourly weather (temperature, relative humidity, surface pressure, cloud cover, wind speed, and precipitation) from Open-Meteo and pulls live station telemetry from Open-Meteo and MET Norway (`api.met.no`) locked to `Asia/Manila` time across all 58 towns in Negros Oriental, Negros Occidental, and Siquijor.
-2. **Direct Multi-Horizon ML Architecture:** Runs 24 independent look-ahead `RandomForestRegressor` models (12 for temperature, 12 for rain probability) using real historical lag features (`temp_lag_1`, `humidity_lag_1`, `pressure_diff`) to prevent compounding errors over a 12-hour forecast window.
-3. **Interactive Cloud Dashboard & Nearest-Hour Evaluation:** Features a Streamlit Community Cloud web UI (`app.py`) synced to `DEFAULT_LOCATION` that plots 12-hour Altair charts, displays live telemetry and per-town Google Sheets sync badges, and computes real-world Mean Absolute Error (MAE) using nearest-timestamp matching (`±45 min`).
+1. **Real 90-Day Atmospheric Data, Multi-Source Telemetry & PAGASA Ground Truth:** Ingests real 90-day historical hourly weather from Open-Meteo and pulls live station telemetry from Open-Meteo, MET Norway (`api.met.no`), and PAGASA Automated Weather Stations (`src/pagasa_aws.py`) locked to `Asia/Manila` time across all 58 towns in Negros Oriental, Negros Occidental, and Siquijor.
+2. **Direct Multi-Horizon Calibrated ML Architecture (`v1_real`):** Runs 24 independent look-ahead models per town (`12` `RandomForestRegressor` temperature models and `12` balanced `RandomForestClassifier` rain probability models) using real historical lag features (`temp_lag_1`, `humidity_lag_1`, `pressure_diff`), clear-sky physical sanity checks, and atomic `.joblib` persistence.
+3. **Interactive Cloud Dashboard & Nearest-Hour Evaluation:** Features a Streamlit Community Cloud web UI (`app.py`) synced to `DEFAULT_LOCATION` that plots 12-hour Altair charts, displays live telemetry, PAGASA AWS rainfall, and Google Sheets sync badges, and computes real-world Mean Absolute Error (MAE) using nearest-timestamp matching (`±45 min`).
 4. **Per-Town Cloud Persistence & Full-Region Cron Automation:** Structured into a clean `src/` Python package with single-city and `--all` batch CLI modes (`main.py`), isolated per-municipality Google Sheet tabs and CSV files (`src/sheets_db.py`), and scheduled 3-hour cloud logging via GitHub Actions.
 
 ---
@@ -37,17 +38,18 @@ weatherPrediction/
 │   └── workflows/
 │       └── cron_logger.yml      # Automated 3-hour GitHub Actions logger for all 58 towns
 ├── data/                        # Caches downloaded 90-day real hourly training datasets
-├── models/                      # Holds compiled binary .joblib model files
+├── models/                      # Holds compiled binary .joblib model files (*_v1_real_*)
 ├── outputs/                     # Contains per-town local CSV backup logs
 │   └── history_<town>.csv       # Isolated local forecast log files per municipality
 ├── src/
 │   ├── __init__.py              # Makes src a structural Python package
-│   ├── config.py                # Feature matrices, paths, and operational constant setups
+│   ├── config.py                # Feature matrices, MODEL_VERSION ("v1_real"), and path setups
 │   ├── data_engine.py           # 90-day real atmospheric data ingestion & caching
 │   ├── locations.json           # Clean geographical database for the 58 NIR municipalities
-│   ├── model_manager.py         # Training and joblib binary tree serialization
+│   ├── model_manager.py         # Training, atomic joblib serialization & rain calibration
+│   ├── pagasa_aws.py            # Lightweight PAGASA AWS HTML scraper & nearest-station matcher
 │   ├── sheets_db.py             # Per-town Google Sheets tab persistence & CSV fallback
-│   └── telemetry.py             # Multi-source live weather ingestion (Open-Meteo & MET Norway)
+│   └── telemetry.py             # Multi-source live weather + PAGASA ground sensor fusion
 ├── app.py                       # Interactive Streamlit web dashboard & accuracy evaluator
 ├── main.py                      # CLI orchestration script (single-city & --all batch modes)
 ├── run_logger.sh                # Optional shell wrapper for local Linux cron scheduling
