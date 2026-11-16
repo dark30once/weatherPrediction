@@ -11,7 +11,7 @@ with open(JSON_PATH, "r") as f:
 
 DEFAULT_LOCATION = "sibulan"
 FORECAST_HORIZON = 12
-MODEL_VERSION = "v1_clf"
+MODEL_VERSION = "v1_real"
 
 FEATURES = [
     "temp", "humidity", "pressure", "cloud_cover", "wind",

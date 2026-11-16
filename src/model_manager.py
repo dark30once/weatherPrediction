@@ -91,4 +91,10 @@ def predict_rain_probability(model, features_row: pd.DataFrame, horizon: int = 1
         ground_floor = min(95.0, (72.0 + precip * 8.0) * dist_factor * decay)
         raw_prob = max(raw_prob, ground_floor)
 
+    # Physical clear-sky sanity check: if live sky is <20% cloudy and PAGASA AWS reports 0 mm/hr, cap +1h/+2h rain
+    live_clouds = float(features_row["cloud_cover"].iloc[0])
+    active_ground_rain = pagasa_aws is not None and pagasa_aws.get("precip_mm", 0.0) > 0.0
+    if not active_ground_rain and live_clouds < 20.0 and horizon <= 2:
+        raw_prob = min(raw_prob, 20.0)
+
     return float(np.clip(raw_prob, 0, 100))
