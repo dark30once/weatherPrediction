@@ -2,7 +2,7 @@ name: Automated Weather Forecast Logger
 
 on:
   schedule:
-    - cron: "17 */3 * * *"  # Offset to :17 past every 3rd UTC hour to avoid :00 queue drops
+    - cron: "0 */3 * * *"  # Offset to :17 past every 3rd UTC hour to avoid :00 queue drops
   workflow_dispatch:       # Allows manual & API-triggered runs
 
 concurrency:
