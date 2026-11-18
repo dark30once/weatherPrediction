@@ -15,7 +15,7 @@ def _atomic_dump(model, filepath: str):
     except FileNotFoundError:
         joblib.dump(model, filepath)
 
-def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
+def manage_models(training_df: pd.DataFrame, max_hours: int, location: str, force_retrain: bool = False):
     temp_registry = {}
     rain_registry = {}
     
@@ -35,7 +35,7 @@ def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
         
         # --- Temperature Regressor (with corrupt-file auto-recovery) ---
         model_t = None
-        if os.path.exists(file_temp):
+        if os.path.exists(file_temp) and not force_retrain:
             try:
                 model_t = joblib.load(file_temp)
             except Exception:
@@ -49,7 +49,7 @@ def manage_models(training_df: pd.DataFrame, max_hours: int, location: str):
 
         # --- Rain Classifier (with corrupt-file auto-recovery) ---
         model_r = None
-        if os.path.exists(file_rain):
+        if os.path.exists(file_rain) and not force_retrain:
             try:
                 model_r = joblib.load(file_rain)
             except Exception:

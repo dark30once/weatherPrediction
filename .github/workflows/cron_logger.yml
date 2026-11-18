@@ -1,7 +1,16 @@
 name: Automated Weather Forecast Logger
 
 on:
-  workflow_dispatch:       # Triggered every 3 hours via cron-job.org webhook (and manual Actions runs)
+  workflow_dispatch:
+    inputs:
+      retrain:
+        description: "Refresh rolling 90-day datasets and retrain models"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 concurrency:
   group: weather-cron-logger
@@ -22,12 +31,18 @@ jobs:
           path: |
             data
             models
-          key: nir-weather-models-v1_real-${{ hashFiles('src/locations.json', 'src/model_manager.py') }}
+          key: nir-weather-models-v2_0-${{ github.run_id }}
           restore-keys: |
-            nir-weather-models-v1_real-
+            nir-weather-models-v2_0-
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Run weather logger for all 58 NIR municipalities
         env:
           GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
-        run: python3 main.py --all
+        run: |
+          if [ "${{ github.event.inputs.retrain }}" == "true" ]; then
+            echo "Weekly rolling-window retraining enabled..."
+            python3 main.py --all --retrain
+          else
+            python3 main.py --all
+          fi

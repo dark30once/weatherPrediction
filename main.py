@@ -10,10 +10,10 @@ from src.model_manager import manage_models, predict_rain_probability
 from src.telemetry import fetch_live_telemetry
 from src.sheets_db import append_forecast_records
 
-def run_for_location(location: str, quiet: bool = False) -> str:
+def run_for_location(location: str, quiet: bool = False, force_retrain: bool = False) -> str:
     """Trains/loads models, generates 12-hour forecast, and saves to that town's dedicated log."""
-    historical_df = generate_synthetic_data(location)
-    temp_models, rain_models = manage_models(historical_df, FORECAST_HORIZON, location)
+    historical_df = generate_synthetic_data(location, force_refresh=force_retrain)
+    temp_models, rain_models = manage_models(historical_df, FORECAST_HORIZON, location, force_retrain=force_retrain)
     live_data = fetch_live_telemetry(location)
 
     live_features_row = pd.DataFrame([{
@@ -46,9 +46,12 @@ def run_for_location(location: str, quiet: bool = False) -> str:
     for h in range(1, FORECAST_HORIZON + 1):
         future_dt = live_data["time"] + datetime.timedelta(hours=h)
         pred_temp = temp_models[h].predict(live_features_row).item()
-        pred_rain = predict_rain_probability(rain_models[h], live_features_row, horizon=h, pagasa_aws=live_data.get("pagasa_aws"))
-
-
+        pred_rain = predict_rain_probability(
+            rain_models[h],
+            live_features_row,
+            horizon=h,
+            pagasa_aws=live_data.get("pagasa_aws")
+        )
 
         if not quiet:
             future_time_str = future_dt.strftime("%I:%M %p")
@@ -73,16 +76,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NIR Weather Forecasting Engine CLI")
     parser.add_argument("--location", type=str, default=DEFAULT_LOCATION, help="Target municipality or city")
     parser.add_argument("--all", action="store_true", help="Run and log forecasts for all 58 NIR municipalities")
+    parser.add_argument("--retrain", action="store_true", help="Refresh rolling 90-day data and retrain models")
     args = parser.parse_args()
 
     if args.all:
         all_locations = sorted(LOCATION_REGISTRY.keys())
-        print(f"Running per-town batch forecast for all {len(all_locations)} NIR towns and cities...")
+        mode_label = "RETRAIN + BATCH FORECAST" if args.retrain else "BATCH FORECAST"
+        print(f"Running {mode_label} for all {len(all_locations)} NIR towns and cities...")
 
         for idx, loc in enumerate(all_locations, start=1):
-            status = run_for_location(loc, quiet=True)
+            status = run_for_location(loc, quiet=True, force_retrain=args.retrain)
             print(f"[{idx}/{len(all_locations)}] {loc.upper()} -> {status}")
-            time.sleep(2.2)  # Keeps writes safely under Google Sheets' 60 requests/min quota
+            time.sleep(1.1)
 
         print("Batch complete for all 58 NIR municipalities!")
     else:
@@ -91,6 +96,6 @@ if __name__ == "__main__":
             print(f"Warning: '{args.location}' is unlisted. Defaulting to {DEFAULT_LOCATION.upper()}.")
             target_location = DEFAULT_LOCATION
 
-        status = run_for_location(target_location, quiet=False)
+        status = run_for_location(target_location, quiet=False, force_retrain=args.retrain)
         print(status)
         print("=======================================================")
