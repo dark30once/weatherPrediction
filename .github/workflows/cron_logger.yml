@@ -10,12 +10,21 @@ concurrency:
 jobs:
   log-weather:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Cache 90-day weather datasets and compiled models
+        uses: actions/cache@v4
+        with:
+          path: |
+            data
+            models
+          key: nir-weather-models-v1_real-${{ hashFiles('src/locations.json', 'src/model_manager.py') }}
+          restore-keys: |
+            nir-weather-models-v1_real-
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Run weather logger for all 58 NIR municipalities
