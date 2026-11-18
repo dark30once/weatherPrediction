@@ -1,12 +1,7 @@
 name: Automated Weather Forecast Logger
 
 on:
-<<<<<<< HEAD
-  schedule:
-    - cron: "0 */3 * * *"  # Offset to :17 past every 3rd UTC hour to avoid :00 queue drops
-=======
->>>>>>> 39a6e39 (Remove redundant GitHub schedule trigger in favor of cron-job.org webhook)
-  workflow_dispatch:       # Allows manual & API-triggered runs
+  workflow_dispatch:       # Triggered every 3 hours via cron-job.org webhook (and manual Actions runs)
 
 concurrency:
   group: weather-cron-logger
