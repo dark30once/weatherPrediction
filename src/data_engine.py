@@ -8,7 +8,7 @@ from src.config import LOCATION_REGISTRY, FEATURES
 def _ensure_features(df: pd.DataFrame) -> pd.DataFrame:
     """Guarantees all 10 required model features exist on both new and legacy cached CSVs."""
     df = df.copy()
-    time_col = "timestamp" if "timestamp" in df.columns else ("time" if "time" in df.columns else None)
+    time_col = "time" if "time" in df.columns else ("timestamp" if "timestamp" in df.columns else None)
 
     if time_col is not None:
         dt_series = pd.to_datetime(df[time_col])
@@ -58,7 +58,7 @@ def generate_synthetic_data(location: str, force_refresh: bool = False) -> pd.Da
         hourly = resp.json()["hourly"]
         
         df = pd.DataFrame({
-            "timestamp": pd.to_datetime(hourly["time"]),
+            "time": pd.to_datetime(hourly["time"]),
             "temp": hourly["temperature_2m"],
             "humidity": hourly["relative_humidity_2m"],
             "pressure": hourly["surface_pressure"],
@@ -69,7 +69,7 @@ def generate_synthetic_data(location: str, force_refresh: bool = False) -> pd.Da
         
         # Trim future forecast hours so training data contains strictly observed past hours
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        df = df[df["timestamp"] <= now_str].copy()
+        df = df[df["time"] <= now_str].copy()
         df = _ensure_features(df)
         
         df.to_csv(cache_path, index=False)
@@ -103,7 +103,7 @@ def _generate_fallback_data(loc_data: dict, cache_path: str) -> pd.DataFrame:
     wind = np.round(np.clip(10 + 4 * np.sin(2 * np.pi * hr_arr / 24) + np.random.normal(0, 2.5, hours), 2, 35), 1)
     
     df = pd.DataFrame({
-        "timestamp": timestamps,
+        "time": timestamps,
         "temp": temp,
         "humidity": humidity,
         "pressure": pressure,
