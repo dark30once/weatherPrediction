@@ -51,20 +51,38 @@ def _get_or_create_tab(spreadsheet, tab_name: str):
         return ws
 
 def append_forecast_records(records: list[dict], location: str) -> str:
+    if not records:
+        return "No records to save."
+
     loc_clean = location.lower().replace(" ", "_")
     tab_name = loc_clean.upper()
     local_csv_path = os.path.join("outputs", f"history_{loc_clean}.csv")
 
-    df = pd.DataFrame(records)
-    file_exists = os.path.exists(local_csv_path)
-    df.to_csv(local_csv_path, mode="a", header=not file_exists, index=False)
+    new_df = pd.DataFrame(records).drop_duplicates(subset=["execution_time", "target_time"], keep="last")
 
+    # 1. Deduplicated Local CSV Storage
+    if os.path.exists(local_csv_path):
+        existing_df = pd.read_csv(local_csv_path)
+        combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+        combined_df = combined_df.drop_duplicates(subset=["execution_time", "target_time"], keep="last")
+        combined_df.to_csv(local_csv_path, index=False)
+    else:
+        new_df.to_csv(local_csv_path, index=False)
+
+    # 2. Deduplicated Google Sheets Storage
     try:
         sh, msg = _get_spreadsheet()
         if sh is None:
             return f"Local CSV only ({msg})"
         ws = _get_or_create_tab(sh, tab_name)
-        rows = df.astype(str).values.tolist()
+
+        # Check recent rows in sheet to avoid writing the exact same execution_time batch twice
+        batch_exec_time = str(new_df["execution_time"].iloc[0])
+        existing_col_a = ws.col_values(1)[-24:]
+        if batch_exec_time in existing_col_a:
+            return f"Duplicate batch skipped for [{tab_name}]!"
+
+        rows = new_df.astype(str).values.tolist()
         ws.append_rows(rows, value_input_option="USER_ENTERED")
         return f"Synced to Google Sheets tab [{tab_name}]!"
     except Exception as e:
@@ -75,16 +93,21 @@ def load_forecast_history(location: str) -> pd.DataFrame:
     tab_name = loc_clean.upper()
     local_csv_path = os.path.join("outputs", f"history_{loc_clean}.csv")
 
+    df = pd.DataFrame()
     try:
         sh, _ = _get_spreadsheet()
         if sh is not None:
             ws = sh.worksheet(tab_name)
             data = ws.get_all_records()
             if data:
-                return pd.DataFrame(data)
+                df = pd.DataFrame(data)
     except Exception:
         pass
 
-    if os.path.exists(local_csv_path):
-        return pd.read_csv(local_csv_path)
-    return pd.DataFrame()
+    if df.empty and os.path.exists(local_csv_path):
+        df = pd.read_csv(local_csv_path)
+
+    if not df.empty and {"execution_time", "target_time"}.issubset(df.columns):
+        df = df.drop_duplicates(subset=["execution_time", "target_time"], keep="last").reset_index(drop=True)
+
+    return df
