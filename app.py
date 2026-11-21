@@ -63,6 +63,11 @@ if not logs_df.empty:
         st.error(f"Sheet/CSV schema mismatch. Found columns: {list(logs_df.columns)}")
         st.stop()
 
+    if "actual_precip_mm" not in logs_df.columns:
+        logs_df["actual_precip_mm"] = 0.0
+    else:
+        logs_df["actual_precip_mm"] = pd.to_numeric(logs_df["actual_precip_mm"], errors="coerce").fillna(0.0)
+
     logs_df["execution_time"] = pd.to_datetime(logs_df["execution_time"])
     logs_df["target_time"] = pd.to_datetime(logs_df["target_time"])
 
@@ -70,7 +75,12 @@ if not logs_df.empty:
 
     if not loc_logs.empty:
         latest_exec_time = loc_logs["execution_time"].max()
-        latest_batch = loc_logs[loc_logs["execution_time"] == latest_exec_time].sort_values("target_time").copy()
+        latest_batch = (
+            loc_logs[loc_logs["execution_time"] == latest_exec_time]
+            .drop_duplicates(subset=["target_time"], keep="last")
+            .sort_values("target_time")
+            .copy()
+        )
 
         st.subheader("📈 12-Hour Machine Learning Predictive Timeline Trends")
         st.caption(f"🕒 **Latest Scheduled Forecast Run:** {latest_exec_time.strftime('%Y-%m-%d %I:%M %p')} PST")
@@ -108,9 +118,13 @@ if not logs_df.empty:
         # --- Model Accuracy & Evaluation Section ---
         st.subheader("🎯 Model Accuracy & Evaluation (Predicted vs. Actual)")
         actuals = (
-            loc_logs[["execution_time", "current_temp"]]
-            .drop_duplicates()
-            .rename(columns={"execution_time": "obs_time", "current_temp": "actual_temp"})
+            loc_logs[["execution_time", "current_temp", "actual_precip_mm"]]
+            .drop_duplicates(subset=["execution_time"], keep="last")
+            .rename(columns={
+                "execution_time": "obs_time",
+                "current_temp": "actual_temp",
+                "actual_precip_mm": "observed_precip_mm"
+            })
             .sort_values("obs_time")
         )
         preds = loc_logs.sort_values("target_time").copy()
@@ -130,23 +144,58 @@ if not logs_df.empty:
             eval_df["abs_error"] = (eval_df["predicted_temp"] - eval_df["actual_temp"]).abs()
             overall_mae = eval_df["abs_error"].mean()
 
-            m1, m2 = st.columns(2)
-            m1.metric("Evaluated Forecast Points", f"{len(eval_df)} hours")
-            m2.metric("Real-World Temperature MAE", f"± {round(overall_mae, 2)} °C")
+            # Rain calibration & classification metrics (>0.1 mm = rain event)
+            eval_df["actual_rain_binary"] = (eval_df["observed_precip_mm"] > 0.1).astype(float)
+            eval_df["actual_rain_pct"] = eval_df["actual_rain_binary"] * 100.0
+            eval_df["pred_rain_frac"] = eval_df["predicted_rain_prob"] / 100.0
+            brier_score = ((eval_df["pred_rain_frac"] - eval_df["actual_rain_binary"]) ** 2).mean()
+            rain_hit_rate = (((eval_df["predicted_rain_prob"] >= 50.0).astype(float) == eval_df["actual_rain_binary"]).mean()) * 100.0
 
-            eval_chart_data = eval_df[["target_time", "predicted_temp", "actual_temp"]].melt(
-                id_vars=["target_time"],
-                value_vars=["predicted_temp", "actual_temp"],
-                var_name="Metric",
-                value_name="Temperature (°C)"
-            )
-            eval_chart = alt.Chart(eval_chart_data).mark_line(point=True).encode(
-                x=alt.X("target_time:T", title="Target Timestamp"),
-                y=alt.Y("Temperature (°C):Q", scale=alt.Scale(zero=False)),
-                color="Metric:N",
-                tooltip=["target_time:T", "Metric:N", "Temperature (°C):Q"]
-            ).properties(height=320).interactive()
-            st.altair_chart(eval_chart, width="stretch")
+            eval_tab1, eval_tab2 = st.tabs(["🌡️ Temperature Accuracy", "🌧️ Rain Probability Accuracy"])
+
+            with eval_tab1:
+                m1, m2 = st.columns(2)
+                m1.metric("Evaluated Forecast Points", f"{len(eval_df)} hours")
+                m2.metric("Real-World Temperature MAE", f"± {round(overall_mae, 2)} °C")
+
+                eval_chart_data = eval_df[["target_time", "predicted_temp", "actual_temp"]].melt(
+                    id_vars=["target_time"],
+                    value_vars=["predicted_temp", "actual_temp"],
+                    var_name="Metric",
+                    value_name="Temperature (°C)"
+                )
+                eval_chart = alt.Chart(eval_chart_data).mark_line(point=True).encode(
+                    x=alt.X("target_time:T", title="Target Timestamp"),
+                    y=alt.Y("Temperature (°C):Q", scale=alt.Scale(zero=False)),
+                    color="Metric:N",
+                    tooltip=["target_time:T", "Metric:N", "Temperature (°C):Q"]
+                ).properties(height=320).interactive()
+                st.altair_chart(eval_chart, width="stretch")
+
+            with eval_tab2:
+                r1, r2, r3 = st.columns(3)
+                r1.metric("Evaluated Forecast Points", f"{len(eval_df)} hours")
+                r2.metric("Rain Brier Score (Lower = Better)", f"{round(brier_score, 3)}")
+                r3.metric("Rain vs. Dry Hit Rate", f"{round(rain_hit_rate, 1)} %")
+
+                rain_eval_data = eval_df[["target_time", "predicted_rain_prob", "actual_rain_pct"]].rename(
+                    columns={
+                        "predicted_rain_prob": "Predicted Rain Prob (%)",
+                        "actual_rain_pct": "Observed Rain Event (0% Dry / 100% Rain)"
+                    }
+                ).melt(
+                    id_vars=["target_time"],
+                    value_vars=["Predicted Rain Prob (%)", "Observed Rain Event (0% Dry / 100% Rain)"],
+                    var_name="Metric",
+                    value_name="Probability / Event (%)"
+                )
+                rain_eval_chart = alt.Chart(rain_eval_data).mark_line(point=True).encode(
+                    x=alt.X("target_time:T", title="Target Timestamp"),
+                    y=alt.Y("Probability / Event (%):Q", scale=alt.Scale(domain=[0, 100])),
+                    color="Metric:N",
+                    tooltip=["target_time:T", "Metric:N", "Probability / Event (%):Q"]
+                ).properties(height=320).interactive()
+                st.altair_chart(rain_eval_chart, width="stretch")
         else:
             st.info("⏳ Waiting for target hours to pass so past predictions can be matched against new actual observations.")
 

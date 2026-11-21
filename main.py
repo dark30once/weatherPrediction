@@ -30,6 +30,7 @@ def run_for_location(location: str, quiet: bool = False) -> str:
     }])[FEATURES]
 
     source_label = live_data.get("source", "Unknown")
+    actual_precip = round(float(live_data.get("precip", 0.0)), 2)
     execution_timestamp = datetime.datetime.now(ZoneInfo("Asia/Manila")).strftime("%Y-%m-%d %H:%M:%S")
 
     if not quiet:
@@ -37,7 +38,7 @@ def run_for_location(location: str, quiet: bool = False) -> str:
         print(f"Location:    {location.upper()}")
         print(f"Data Source: {source_label}")
         print(f"Time:        {live_data['time'].strftime('%Y-%m-%d %I:%M %p')}")
-        print(f"Conditions:  {live_data['temp']}°C | Humidity: {live_data['humidity']}% | Cloud Cover: {live_data['cloud_cover']}%")
+        print(f"Conditions:  {live_data['temp']}°C | Humidity: {live_data['humidity']}% | Cloud Cover: {live_data['cloud_cover']}% | Precip: {actual_precip} mm")
         print("-------------------------------------------------------")
         print(f"               {FORECAST_HORIZON}-HOUR FORECAST TIMELINE                ")
         print("-------------------------------------------------------")
@@ -47,8 +48,6 @@ def run_for_location(location: str, quiet: bool = False) -> str:
         future_dt = live_data["time"] + datetime.timedelta(hours=h)
         pred_temp = temp_models[h].predict(live_features_row).item()
         pred_rain = predict_rain_probability(rain_models[h], live_features_row, horizon=h, pagasa_aws=live_data.get("pagasa_aws"))
-
-
 
         if not quiet:
             future_time_str = future_dt.strftime("%I:%M %p")
@@ -61,7 +60,8 @@ def run_for_location(location: str, quiet: bool = False) -> str:
             "current_temp": round(live_data["temp"], 2),
             "target_time": future_dt.strftime("%Y-%m-%d %H:%M:%S"),
             "predicted_temp": round(pred_temp, 2),
-            "predicted_rain_prob": round(pred_rain, 1)
+            "predicted_rain_prob": round(pred_rain, 1),
+            "actual_precip_mm": actual_precip
         })
 
     if not quiet:
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         for idx, loc in enumerate(all_locations, start=1):
             status = run_for_location(loc, quiet=True)
             print(f"[{idx}/{len(all_locations)}] {loc.upper()} -> {status}")
-            time.sleep(2.2)  # Keeps writes safely under Google Sheets' 60 requests/min quota
+            time.sleep(2.2)
 
         print("Batch complete for all 58 NIR municipalities!")
     else:
