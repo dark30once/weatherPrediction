@@ -9,11 +9,14 @@ def _attach_pagasa_sensor(telemetry: dict, lat: float, lon: float) -> dict:
     """Enriches live telemetry with nearest active PAGASA AWS ground-truth rainfall."""
     aws = get_pagasa_ground_boost(lat, lon)
     telemetry["pagasa_aws"] = aws
+    telemetry.setdefault("precip", 0.0)
 
     if aws is not None:
-        # If PAGASA station is right next door (<35 km) and reports higher ground humidity, blend it in
-        if aws["distance_km"] <= 35.0 and aws["humidity"] is not None:
-            telemetry["humidity"] = max(telemetry["humidity"], float(aws["humidity"]))
+        if aws["distance_km"] <= 35.0:
+            if aws["humidity"] is not None:
+                telemetry["humidity"] = max(telemetry["humidity"], float(aws["humidity"]))
+            if aws["precip_mm"] is not None:
+                telemetry["precip"] = max(float(telemetry["precip"]), float(aws["precip_mm"]))
 
         precip_note = f" | PAGASA AWS ({aws['station']}): {aws['precip_mm']} mm/hr"
         telemetry["source"] = telemetry["source"] + precip_note
@@ -32,7 +35,7 @@ def fetch_live_telemetry(target_loc: str) -> dict:
         params = {
             "latitude": lat,
             "longitude": lon,
-            "hourly": "temperature_2m,relative_humidity_2m,surface_pressure,cloud_cover,wind_speed_10m",
+            "hourly": "temperature_2m,relative_humidity_2m,surface_pressure,cloud_cover,wind_speed_10m,precipitation",
             "past_hours": 3,
             "forecast_hours": 1,
             "timezone": "Asia/Manila"
@@ -47,6 +50,7 @@ def fetch_live_telemetry(target_loc: str) -> dict:
             "pressure": float(hourly["surface_pressure"][-2]),
             "cloud_cover": float(hourly["cloud_cover"][-2]),
             "wind": float(hourly["wind_speed_10m"][-2]),
+            "precip": float(hourly.get("precipitation", [0.0, 0.0])[-2] or 0.0),
             "temp_lag_1": float(hourly["temperature_2m"][-3]),
             "humidity_lag_1": float(hourly["relative_humidity_2m"][-3]),
             "pressure_diff": float(hourly["surface_pressure"][-2]) - float(hourly["surface_pressure"][-3]),
@@ -67,8 +71,10 @@ def fetch_live_telemetry(target_loc: str) -> dict:
         timeseries = met_resp.json()["properties"]["timeseries"]
 
         it = iter(timeseries)
-        curr = next(it)["data"]["instant"]["details"]
+        first_entry = next(it)
+        curr = first_entry["data"]["instant"]["details"]
         nxt = next(it)["data"]["instant"]["details"]
+        precip_1h = float(first_entry["data"].get("next_1_hours", {}).get("details", {}).get("precipitation_amount", 0.0))
 
         temp = float(curr["air_temperature"])
         humidity = float(curr["relative_humidity"])
@@ -82,6 +88,7 @@ def fetch_live_telemetry(target_loc: str) -> dict:
             "pressure": pressure,
             "cloud_cover": cloud_cover,
             "wind": wind,
+            "precip": precip_1h,
             "temp_lag_1": round(temp - 0.2, 1),
             "humidity_lag_1": humidity,
             "pressure_diff": round(float(nxt["air_pressure_at_sea_level"]) - pressure, 2),
@@ -109,6 +116,7 @@ def fetch_live_telemetry(target_loc: str) -> dict:
         "pressure": 1010.0,
         "cloud_cover": est_clouds,
         "wind": 11.0,
+        "precip": 0.0,
         "temp_lag_1": est_temp_lag,
         "humidity_lag_1": round(est_humidity + 1.0, 1),
         "pressure_diff": -0.1,
