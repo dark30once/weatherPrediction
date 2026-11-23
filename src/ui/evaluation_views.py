@@ -42,7 +42,7 @@ def render_accuracy_evaluation(loc_logs: pd.DataFrame) -> None:
     brier_score = ((eval_df["pred_rain_frac"] - eval_df["actual_rain_binary"]) ** 2).mean()
     rain_hit_rate = (((eval_df["predicted_rain_prob"] >= 50.0).astype(float) == eval_df["actual_rain_binary"]).mean()) * 100.0
 
-    eval_tab1, eval_tab2 = st.tabs(["🌡️ Temperature Accuracy", "🌧️ Rain Probability Accuracy"])
+    eval_tab1, eval_tab2 = st.tabs(["🌡️ Temperature Accuracy", "🌧️ Rain Probability & Intensity"])
 
     with eval_tab1:
         m1, m2 = st.columns(2)
@@ -78,11 +78,6 @@ def render_accuracy_evaluation(loc_logs: pd.DataFrame) -> None:
         st.altair_chart(eval_chart, width="stretch")
 
     with eval_tab2:
-        r1, r2, r3 = st.columns(3)
-        r1.metric("Evaluated Forecast Points", f"{len(eval_df)} hours")
-        r2.metric("Rain Brier Score (Lower = Better)", f"{round(brier_score, 3)}")
-        r3.metric("Rain vs. Dry Hit Rate", f"{round(rain_hit_rate, 1)} %")
-
         rain_grouped = (
             eval_df.groupby("obs_time", as_index=False)
             .agg(
@@ -92,26 +87,58 @@ def render_accuracy_evaluation(loc_logs: pd.DataFrame) -> None:
             )
             .sort_values("obs_time")
         )
+        peak_rain_mm = float(rain_grouped["observed_precip_mm"].max())
 
-        rain_bars = alt.Chart(rain_grouped).mark_bar(color="#ff6b6b", opacity=0.4, width=12).encode(
-            x=alt.X("obs_time:T", title="Observed Timestamp"),
-            y=alt.Y("actual_rain_pct:Q", scale=alt.Scale(domain=[0, 100]), title="Probability / Observed Rain (%)"),
-            tooltip=[
-                alt.Tooltip("obs_time:T", title="Time"),
-                alt.Tooltip("observed_precip_mm:Q", title="Observed Precip (mm)", format=".2f"),
-                alt.Tooltip("actual_rain_pct:Q", title="Rain Event (100%=Rain, 0%=Dry)")
-            ]
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Evaluated Points", f"{len(eval_df)} hours")
+        r2.metric("Rain Brier Score", f"{round(brier_score, 3)}")
+        r3.metric("Rain vs. Dry Hit Rate", f"{round(rain_hit_rate, 1)} %")
+        r4.metric("Peak Observed Rain", f"{round(peak_rain_mm, 2)} mm/hr")
+
+        base = alt.Chart(rain_grouped).encode(
+            x=alt.X("obs_time:T", title="Observed Timestamp")
         )
 
-        rain_line = alt.Chart(rain_grouped).mark_line(point=True, color="#29b5e8", strokeWidth=2.5).encode(
-            x=alt.X("obs_time:T"),
+        # Left Axis Layer 1: Binary Rain Event shading (100% when > 0.1 mm)
+        event_shading = base.mark_bar(color="#ff6b6b", opacity=0.18, width=16).encode(
+            y=alt.Y("actual_rain_pct:Q", scale=alt.Scale(domain=[0, 100]), title="Rain Probability (%)")
+        )
+
+        # Left Axis Layer 2: Predicted Rain Probability (%) curve
+        prob_line = base.mark_line(point=True, color="#29b5e8", strokeWidth=2.5).encode(
             y=alt.Y("avg_pred_rain:Q", scale=alt.Scale(domain=[0, 100])),
             tooltip=[
                 alt.Tooltip("obs_time:T", title="Time"),
-                alt.Tooltip("avg_pred_rain:Q", title="Avg Predicted Rain Prob (%)", format=".1f")
+                alt.Tooltip("avg_pred_rain:Q", title="Avg Predicted Rain (%)", format=".1f"),
+                alt.Tooltip("observed_precip_mm:Q", title="Observed Rain (mm/hr)", format=".2f")
             ]
         )
 
-        rain_eval_chart = (rain_bars + rain_line).properties(height=320).interactive()
+        # Right Axis Layer 3: Observed Rainfall Intensity (mm/hr) bars
+        max_axis_mm = max(2.0, round(peak_rain_mm * 1.25, 1))
+        intensity_bars = base.mark_bar(color="#f59e0b", opacity=0.85, width=8).encode(
+            y=alt.Y(
+                "observed_precip_mm:Q",
+                scale=alt.Scale(domain=[0, max_axis_mm]),
+                axis=alt.Axis(title="Observed Rainfall (mm/hr)", titleColor="#f59e0b", labelColor="#f59e0b")
+            ),
+            tooltip=[
+                alt.Tooltip("obs_time:T", title="Time"),
+                alt.Tooltip("observed_precip_mm:Q", title="Observed Rain (mm/hr)", format=".2f"),
+                alt.Tooltip("avg_pred_rain:Q", title="Avg Predicted Rain (%)", format=".1f")
+            ]
+        )
+
+        left_layers = alt.layer(event_shading, prob_line)
+        rain_eval_chart = (
+            alt.layer(left_layers, intensity_bars)
+            .resolve_scale(y="independent")
+            .properties(height=340)
+            .interactive()
+        )
         st.altair_chart(rain_eval_chart, width="stretch")
-        st.caption("🔵 **Cyan Line:** Average Predicted Rain Probability (%) across overlapping horizons | 🔴 **Coral Bars:** Observed Rain Event (`100%` when `> 0.1 mm`)")
+        st.caption(
+            "🔵 **Cyan Line (Left Axis):** Avg Predicted Rain Probability (%) | "
+            "🟠 **Amber Bars (Right Axis):** Observed Rainfall Intensity (`mm/hr`) | "
+            "🔴 **Coral Shading:** Binary Rain Event (`> 0.1 mm`)"
+        )
