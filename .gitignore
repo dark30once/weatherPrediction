@@ -19,6 +19,7 @@ data/*.csv
 outputs/*.csv
 outputs/*.log
 
+
 # OS & editor files
 .DS_Store
 Thumbs.db
@@ -26,3 +27,4 @@ Thumbs.db
 .idea/
 
 service_account.json
+outputs/.last_local_retrain
